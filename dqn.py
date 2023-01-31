@@ -128,6 +128,7 @@ def train(
         done = t or t_
 
       average_return += (episode_return - average_return) / (1 + i_episode)
+      print(f"----Episode {i_episode+1} return: {episode_return}", end="\r")
 
     print(f"| Epoch {i_epoch+1} | Loss: {epoch_loss:.3f}", end=" | ")
     print(f"Average return: {average_return:.3f} |")
@@ -155,13 +156,18 @@ def update(optimizer, opt_state, params, target_params, q_net, batch_data,
     max_next_q_vals = q_net.apply(target_params, b_s_).max(axis=1)
     td_targets = b_r + gamma * max_next_q_vals * (1 - b_d)
 
-  def loss_fn(params):
+  @jax.jit
+  def loss_fn(params, s, a, td_tgt):
     return optax.l2_loss(
-        jnp.take_along_axis(q_net.apply(params, b_s), b_a, axis=1).squeeze() -
-        td_targets).mean()
+        jnp.take_along_axis(q_net.apply(params, s), a, axis=1).squeeze() -
+        td_tgt).mean()
 
-  loss, grads = jax.value_and_grad(loss_fn)(params)
-  updates, opt_state = optimizer.update(grads, opt_state, params)
-  params = optax.apply_updates(params, updates)
+  @jax.jit
+  def step(params, opt_state, s, a, td_tgt):
+    loss, grads = jax.value_and_grad(loss_fn)(params, s, a, td_tgt)
+    updates, opt_state = optimizer.update(grads, opt_state, params)
+    params = optax.apply_updates(params, updates)
 
-  return params, opt_state, loss
+    return params, opt_state, loss
+
+  return step(params, opt_state, b_s, b_a, td_targets)
