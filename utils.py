@@ -1,5 +1,28 @@
+import jax
 import numpy as np
+import optax
 from jax import tree_map
+
+
+@jax.jit
+def step(params, loss_fn, optimizer, opt_state, xs, y_true):
+  loss, grads = jax.value_and_grad(loss_fn)(params, xs, y_true)
+  updates, opt_state = optimizer.update(grads, opt_state, params)
+  params = optax.apply_updates(params, updates)
+  return params, opt_state, loss
+
+
+def to_batch(data, axis=-1):
+  if isinstance(data, list):
+    data = np.array(data)
+
+  if data.ndim == 1:
+    return np.expand_dims(data, axis=axis)
+  elif data.ndim == 2:
+    return data
+  else:
+    raise ValueError(
+        f"Expect data with 1 or 2 dimensions, but get {data.ndim}!")
 
 
 class ReplayBuffer(object):
