@@ -139,7 +139,7 @@ def update(optimizer, opt_state, params, target_params, q_net, batch_data,
            gamma, dqn_type):
   b_s = batch_data["observations"]
   b_a = to_batch(batch_data["actions"])
-  b_r = to_batch(batch_data["rewards"])
+  b_r = batch_data["rewards"]
   b_s_ = batch_data["next_observations"]
   b_t = batch_data["terminals"].astype(np.float32)
   b_t_ = batch_data["timeouts"].astype(np.float32)
@@ -157,10 +157,11 @@ def update(optimizer, opt_state, params, target_params, q_net, batch_data,
 
   def loss_fn(params):
     return optax.l2_loss(
-        jnp.take_along_axis(q_net.apply(params, b_s), b_a, axis=1) -
+        jnp.take_along_axis(q_net.apply(params, b_s), b_a, axis=1).squeeze() -
         td_targets).mean()
 
   loss, grads = jax.value_and_grad(loss_fn)(params)
   updates, opt_state = optimizer.update(grads, opt_state, params)
   params = optax.apply_updates(params, updates)
+
   return params, opt_state, loss
