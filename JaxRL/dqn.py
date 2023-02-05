@@ -35,6 +35,29 @@ class Qnet(nn.Module):
     return ("params",)
 
 
+class DQNPolicy(object):
+  action_dim: int
+  eps: float = 0.1
+
+  def update_q_net(self, q_net, params):
+    self.q_net = q_net
+    self.params = params
+
+  @partial(jax.jit, static_argnames=("self"))
+  def act(self, params, rng, observations):
+    return self.q_net.apply(params,
+                            observations,
+                            rng=JaxRNG(rng)(self.q_net.rng_keys())).max(axis=-1)
+
+  def __call__(self, observations, deterministic=False):
+    actions = self.act(self.params, next_rng(), observations)
+
+    if deterministic:
+      return actions
+    else:
+      return jax.random.randint(next_rng(), actions.shape, 0, self.action_dim)
+
+
 class DQN(object):
   @staticmethod
   def get_default_config(updates=None):
