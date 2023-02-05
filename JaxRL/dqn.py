@@ -72,11 +72,11 @@ class DQN(object):
   @staticmethod
   def get_default_config(updates=None):
     config = ConfigDict()
-    config.discount = 0.99
-    config.epsilon = 0.1
-    config.target_update = 100
-    config.dqn_type = "vanilla"
-    config.lr = 1e-3
+    config.discount = 0.98
+    config.epsilon = 0.01
+    config.target_update = 10
+    config.dqn_type = "double"
+    config.lr = 2e-3
 
     if updates:
       config.update(ConfigDict(updates).copy_and_resolve_references())
@@ -128,7 +128,7 @@ class DQN(object):
                                 rngs=JaxRNG(rng)(self.q_net.rng_keys()))
 
       if self.config.dqn_type == "double":
-        max_actions = forward_qf(params["q_net"], b_s).argmax(axis=1)
+        max_actions =jnp.expand_dims(forward_qf(params["q_net"], b_s).argmax(axis=1), axis=-1)
         target_q_vals = jnp.take_along_axis(forward_qf(
             target_qf_params["q_net"], b_s_),
                                             max_actions,
