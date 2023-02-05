@@ -6,7 +6,7 @@ class StepSampler(object):
     self.max_traj_length = max_traj_length
     self._env = env
     self._traj_steps = 0
-    self._current_observation = self.env.reset()
+    self._current_observation = self.env.reset()[0]
 
   def sample(self, policy, n_steps, deterministic=False, replay_buffer=None):
     observations = []
@@ -19,23 +19,25 @@ class StepSampler(object):
       self._traj_steps += 1
       observation = self._current_observation
       action = policy(observation.reshape(1, -1),
-                      deterministic=deterministic).reshape(-1)
-      next_observation, reward, done, _ = self.env.step(action)
+                      deterministic=deterministic).squeeze()
+      next_observation, reward, terminated, truncated, _ = self.env.step(action)
+      done = terminated or truncated
+
       observations.append(observation)
       actions.append(action)
       rewards.append(reward)
-      dones.append(done)
+      dones.append(terminated)
       next_observations.append(next_observation)
 
       if replay_buffer is not None:
         replay_buffer.add_sample(observation, action, reward, next_observation,
-                                 done)
+                                 terminated)
 
       self._current_observation = next_observation
 
       if done or self._traj_steps >= self.max_traj_length:
         self._traj_steps = 0
-        self._current_observation = self.env.reset()
+        self._current_observation = self.env.reset()[0]
 
     return dict(
         observations=np.array(observations, dtype=np.float32),
@@ -64,21 +66,24 @@ class TrajSampler(object):
       next_observations = []
       dones = []
 
-      observation = self.env.reset()
+      observation = self.env.reset()[0]
 
       for _ in range(self.max_traj_length):
         action = policy(observation.reshape(1, -1),
-                        deterministic=deterministic).reshape(-1)
-        next_observation, reward, done, _ = self.env.step(action)
+                        deterministic=deterministic).squeeze()
+        next_observation, reward, terminated, truncated, _ = self.env.step(
+            action)
+        done = terminated or truncated
+
         observations.append(observation)
         actions.append(action)
         rewards.append(reward)
-        dones.append(done)
+        dones.append(terminated)
         next_observations.append(next_observation)
 
         if replay_buffer is not None:
           replay_buffer.add_sample(observation, action, reward,
-                                   next_observation, done)
+                                   next_observation, terminated)
 
         observation = next_observation
 
