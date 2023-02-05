@@ -1,173 +1,148 @@
-from utils import ReplayBuffer, to_batch
+from .jax_utils import (
+    next_rng,
+    wrap_with_rng,
+    JaxRNG,
+    mse_loss,
+    value_and_multi_grad,
+    collect_jax_metrics,
+)
+from .nn import MLP
 
-import haiku as hk
 import jax
 import jax.numpy as jnp
-import numpy as np
+import flax.linen as nn
 import optax
-
-rng_key = jax.random.PRNGKey(0)
-
-
-def _new_key():
-  global rng_key
-  rng_key, sub_key = jax.random.split(rng_key)
-  return sub_key
+from copy import deepcopy
+from flax.training.train_state import TrainState
+from functools import partial
+from ml_collections import ConfigDict
 
 
-def init(env, hidden_dims, dqn_type="vanilla"):
-  action_dim = env.action_space.n
+class Qnet(nn.Module):
+  obs_dim: int
+  action_dim: int
+  arch: str = "256-256"
+  orthogonal_init: bool = False
 
-  if dqn_type != "dueling":
+  @nn.compact
+  def __call__(self, observations):
+    output = MLP(self.action_dim, self.arch, self.orthogonal_init)(observations)
 
-    def q_net(state):
-      mlp = hk.nets.MLP(hidden_dims + [action_dim])
-      return mlp(state)
+    return output
 
-  else:
-
-    def q_net(state):
-      hidden_layers = hk.nets.MLP(hidden_dims, activate_final=True)
-      fc_a = hk.nets.MLP([action_dim])
-      fc_v = hk.nets.MLP([1])
-
-      hidden_output = hidden_layers(state)
-      adv = fc_a(hidden_output)
-      val = fc_v(hidden_output)
-
-      return val + adv - adv.mean(axis=1).reshape(-1, 1)
-
-  q_net_t = hk.without_apply_rng(hk.transform(q_net))
-
-  # Initialize q_net
-  dummy_state = np.array([env.reset()[0]])
-  params = q_net_t.init(_new_key(), dummy_state)
-
-  return params, q_net_t
+  @nn.nowrap
+  def rng_keys(self):
+    return ("params",)
 
 
-def expl_action(env, params, q_net, state, eps):
-  action_low = 0
-  action_high = env.action_space.n
+class DQN(object):
+  @staticmethod
+  def get_default_config(updates=None):
+    config = ConfigDict()
+    config.discount = 0.99
+    config.epsilon = 0.1
+    config.target_update = 100
+    config.dqn_type = "vanilla"
+    config.lr = 1e-3
 
-  if jax.random.uniform(_new_key()) < eps:
-    action = jax.random.randint(_new_key(), (), action_low, action_high).item()
-  else:
-    if state.ndim == 1:
-      state = np.array([state])
-    action = q_net.apply(params, state).argmax().item()
+    if updates:
+      config.update(ConfigDict(updates).copy_and_resolve_references())
 
-  return action
+    return config
 
+  def __init__(self, config, q_net: Qnet):
+    self.config = self.get_default_config(config)
+    self.q_net = q_net
+    self.obs_dim = q_net.obs_dim
+    self.action_dim = q_net.action_dim
 
-def optimal_action(params, q_net, state):
-  if state.ndim == 1:
-    state = np.array([state])
-  return q_net.apply(params, state).argmax().item()
+    self._train_states = {}
 
+    q_params = self.q_net.init(next_rng(self.q_net.rng_keys()),
+                               jnp.zeros((10, self.obs_dim)))
+    self._train_states["q_net"] = TrainState.create(params=q_params,
+                                                    tx=optax.adam(
+                                                        self.config.lr),
+                                                    apply_fn=None)
+    self._target_qf_params = deepcopy({"q_net": q_params})
 
-def train(
-    env,
-    params,
-    q_net,
-    num_epochs,
-    num_episodes_per_epoch,
-    batch_size,
-    minimal_size,
-    max_buffer_size,
-    learning_rate,
-    gamma,
-    epsilon,
-    target_update,
-    dqn_type="vanilla",
-):
-  buffer = ReplayBuffer(max_buffer_size)
-  update_cnt = 0
-  target_params = params.copy()
-  optimizer = optax.adam(learning_rate=learning_rate)
-  opt_state = optimizer.init(params)
+    model_keys = ["q_net"]
+    self._model_keys = tuple(model_keys)
+    self._total_steps = 0
 
-  for i_epoch in range(num_epochs):
-    epoch_loss = 0
-    loss_cnt = 0
-    average_return = 0
-    for i_episode in range(num_episodes_per_epoch):
-      episode_return = 0
-      s, _ = env.reset()
-      done = False
+  def train(self, batch):
+    self._total_steps += 1
+    self._train_states, self._target_qf_params, metrics = self._train_step(
+        self._train_states, self._target_qf_params, next_rng(), batch)
 
-      while not done:
-        a = expl_action(env, params, q_net, s, epsilon)
-        s_, r, t, t_, _ = env.step(a)
+    return metrics
 
-        buffer.add(s, a, r, s_, t, t_)
-        episode_return += r
+  @partial(jax.jit, static_argnames="self")
+  def _train_step(self, train_states, target_qf_params, rng, batch):
+    rng_generator = JaxRNG(rng)
 
-        if len(buffer) > minimal_size:
-          batch_data = buffer.sample(batch_size)
-          if update_cnt == target_update:
-            target_params = params.copy()
-            update_cnt = 0
+    def loss_fn(params):
+      b_s = batch["observations"]
+      b_a = batch["actions"]
+      b_s_ = batch["next_observations"]
+      b_r = batch["rewards"]
+      b_d = batch["dones"]
 
-          params, opt_state, loss = update(
-              optimizer,
-              opt_state,
-              params,
-              target_params,
-              q_net,
-              batch_data,
-              gamma,
-              dqn_type,
-          )
-          update_cnt += 1
+      @wrap_with_rng(rng_generator())
+      def forward_qf(rng, *args, **kwargs):
+        return self.q_net.apply(*args,
+                                **kwargs,
+                                rngs=JaxRNG(rng)(self.q_net.rng_keys()))
 
-          epoch_loss += (loss - epoch_loss) / (loss_cnt + 1)
-          loss_cnt += 1
+      if self.config.dqn_type == "double":
+        max_actions = forward_qf(params["q_net"], b_s).argmax(axis=1)
+        target_q_vals = jnp.take_along_axis(forward_qf(
+            target_qf_params["q_net"], b_s_),
+                                            max_actions,
+                                            axis=1)
+      else:
+        target_q_vals = forward_qf(target_qf_params["q_net"], b_s_).max(axis=1)
 
-        s = s_
-        done = t or t_
+      td_target = jax.lax.stop_gradient(b_r +
+                                        self.config.discount * target_q_vals *
+                                        (1 - b_d))
+      q_vals = jnp.take_along_axis(forward_qf(params["q_net"], b_s),
+                                   b_a,
+                                   axis=1)
 
-      average_return += (episode_return - average_return) / (1 + i_episode)
-      print(f"----Episode {i_episode+1} return: {episode_return}", end="\r")
+      q_loss = mse_loss(q_vals, td_target)
 
-    print(f"| Epoch {i_epoch+1} | Loss: {epoch_loss:.3f}", end=" | ")
-    print(f"Average return: {average_return:.3f} |")
+      return q_loss, locals()
 
-  return params
+    train_params = {key: train_states[key].params for key in self.model_keys}
+    (_, aux_vals), grads = value_and_multi_grad(loss_fn,
+                                                len(self.model_keys),
+                                                has_aux=True)(train_params)
 
+    new_train_states = {
+        key: train_states[key].apply_gradients(grads=grads[i][key])
+        for i, key in enumerate(self.model_keys)
+    }
+    if self.total_steps % self.config.target_update == 0:
+      target_qf_params["q_net"] = deepcopy(new_train_states["q_net"])
 
-def update(optimizer, opt_state, params, target_params, q_net, batch_data,
-           gamma, dqn_type):
-  b_s = batch_data["observations"]
-  b_a = to_batch(batch_data["actions"])
-  b_r = batch_data["rewards"]
-  b_s_ = batch_data["next_observations"]
-  b_t = batch_data["terminals"].astype(np.float32)
-  b_t_ = batch_data["timeouts"].astype(np.float32)
-  b_d = jnp.fmax(b_t, b_t_)
+    metrics = collect_jax_metrics(aux_vals,
+                                  ["q_vals", "target_q_vals", "q_loss"])
 
-  if dqn_type == "double":
-    max_actions = q_net.apply(params, b_s_).argmax(axis=1)
-    max_next_q_vals = jnp.take_along_axis(q_net.apply(target_params, b_s_),
-                                          max_actions,
-                                          axis=1)
-    td_targets = b_r + gamma * max_next_q_vals * (1 - b_d)
-  else:
-    max_next_q_vals = q_net.apply(target_params, b_s_).max(axis=1)
-    td_targets = b_r + gamma * max_next_q_vals * (1 - b_d)
+    return new_train_states, target_qf_params, metrics
 
-  @jax.jit
-  def loss_fn(params, s, a, td_tgt):
-    return optax.l2_loss(
-        jnp.take_along_axis(q_net.apply(params, s), a, axis=1).squeeze() -
-        td_tgt).mean()
+  @property
+  def model_keys(self):
+    return self._model_keys
 
-  @jax.jit
-  def step(params, opt_state, s, a, td_tgt):
-    loss, grads = jax.value_and_grad(loss_fn)(params, s, a, td_tgt)
-    updates, opt_state = optimizer.update(grads, opt_state, params)
-    params = optax.apply_updates(params, updates)
+  @property
+  def train_states(self):
+    return self._train_states
 
-    return params, opt_state, loss
+  @property
+  def train_params(self):
+    return {key: self.train_states[key].params for key in self.model_keys}
 
-  return step(params, opt_state, b_s, b_a, td_targets)
+  @property
+  def total_steps(self):
+    return self._total_steps

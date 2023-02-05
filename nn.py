@@ -110,7 +110,7 @@ class QFunc(nn.Module):
     return jnp.squeeze(output, -1)
 
   @nn.nowrap
-  def rng_key(self):
+  def rng_keys(self):
     return ("params",)
 
 
