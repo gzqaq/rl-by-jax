@@ -88,7 +88,7 @@ class Timer(object):
     self._start_time = time.time()
     return self
 
-  def __exit__(self,):
+  def __exit__(self, exc_type, exc_value, exc_tb):
     self._time = time.time() - self._start_time
 
   def __call__(self):
@@ -100,8 +100,8 @@ class WandBLogger(object):
   def get_default_config(updates=None):
     config = ConfigDict()
     config.online = False
-    config.prefix = "JaxCQL"
-    config.project = "sac"
+    config.prefix = "JaxRL"
+    config.project = "dqn"
     config.output_dir = "/tmp/JaxCQL"
     config.random_delay = 0.0
     config.experiment_id = config_dict.placeholder(str)
@@ -237,7 +237,7 @@ class ReplayBuffer(object):
         observations=self._obs[indices, ...],
         actions=self._actions[indices, ...],
         rewards=self._rewards[indices, ...],
-        next_observations=self._next_observations[indices, ...],
+        next_observations=self._next_obs[indices, ...],
         dones=self._dones[indices, ...],
     )
 
