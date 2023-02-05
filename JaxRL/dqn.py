@@ -36,26 +36,36 @@ class Qnet(nn.Module):
 
 
 class DQNPolicy(object):
-  action_dim: int
+  q_net: Qnet
   eps: float = 0.1
 
-  def update_q_net(self, q_net, params):
+  def __init__(self, q_net: Qnet, eps: float = 0.1):
     self.q_net = q_net
+    self.eps = eps
+    self.action_dim = self.q_net.action_dim
+
+  def update_q_net(self, params):
     self.params = params
+
+    return self
 
   @partial(jax.jit, static_argnames=("self"))
   def act(self, params, rng, observations):
     return self.q_net.apply(params,
                             observations,
-                            rng=JaxRNG(rng)(self.q_net.rng_keys())).max(axis=-1)
+                            rngs=JaxRNG(rng)(
+                                self.q_net.rng_keys())).argmax(axis=-1)
 
   def __call__(self, observations, deterministic=False):
-    actions = self.act(self.params, next_rng(), observations)
-
     if deterministic:
-      return actions
+      actions = self.act(self.params, next_rng(), observations)
     else:
-      return jax.random.randint(next_rng(), actions.shape, 0, self.action_dim)
+      if jax.random.uniform(next_rng()) < self.eps:
+        actions = jax.random.randint(next_rng(), (1,), 0, self.action_dim)
+      else:
+        actions = self.act(self.params, next_rng(), observations)
+
+    return jax.device_get(actions)
 
 
 class DQN(object):
@@ -106,7 +116,7 @@ class DQN(object):
 
     def loss_fn(params):
       b_s = batch["observations"]
-      b_a = batch["actions"]
+      b_a = batch["actions"].astype(int)
       b_s_ = batch["next_observations"]
       b_r = batch["rewards"]
       b_d = batch["dones"]
@@ -135,7 +145,7 @@ class DQN(object):
 
       q_loss = mse_loss(q_vals, td_target)
 
-      return q_loss, locals()
+      return (q_loss,), locals()
 
     train_params = {key: train_states[key].params for key in self.model_keys}
     (_, aux_vals), grads = value_and_multi_grad(loss_fn,
