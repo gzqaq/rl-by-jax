@@ -10,6 +10,7 @@ from JaxRL.utils import (
     get_user_flags,
     prefix_metrics,
 )
+from viskit.logging import logger, setup_logger
 
 import absl
 import gymnasium as gym
@@ -18,7 +19,7 @@ import numpy as np
 FLAGS_DEF = define_flags_with_default(
     env="CartPole-v1",
     max_traj_length=500,
-    replay_buffer_size=10000,
+    replay_buffer_size=1000000,
     seed=7,
     save_model=False,
 
@@ -28,10 +29,10 @@ FLAGS_DEF = define_flags_with_default(
     n_epochs=200,
     n_env_steps_per_epoch=500,
     n_train_step_per_epoch=100,
-    eval_period=10,
+    eval_period=1,
     eval_n_trajs=5,
     batch_size=256,
-    
+
     dqn=DQN.get_default_config(),
     logging=WandBLogger.get_default_config(),
 )
@@ -43,6 +44,9 @@ def main(argv):
 
   variant = get_user_flags(FLAGS, FLAGS_DEF)
   wandb_logger = WandBLogger(config=FLAGS.logging, variant=variant)
+  setup_logger(variant=variant,
+               seed=FLAGS.seed,
+               base_log_dir=FLAGS.logging.output_dir)
 
   set_random_seed(FLAGS.seed)
 
@@ -59,6 +63,7 @@ def main(argv):
   dqn = DQN(FLAGS.dqn, q_net)
   policy = DQNPolicy(q_net, dqn.config.epsilon)
 
+  viskit_metrics = dict()
   for i_epoch in range(FLAGS.n_epochs):
     metrics = {}
 
@@ -99,6 +104,9 @@ def main(argv):
     metrics["eval_time"] = eval_timer()
     metrics["epoch_time"] = rollout_timer() + train_timer() + eval_timer()
     wandb_logger.log(metrics)
+    viskit_metrics.update(metrics)
+    logger.record_dict(viskit_metrics)
+    logger.dump_tabular(with_prefix=False, with_timestamp=False)
 
   if FLAGS.save_model:
     save_data = {"dqn": dqn, "variant": variant, "epoch": i_epoch}
