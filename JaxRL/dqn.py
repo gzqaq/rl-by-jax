@@ -73,7 +73,7 @@ class DQN(object):
   def get_default_config(updates=None):
     config = ConfigDict()
     config.discount = 0.98
-    config.epsilon = 0.01
+    config.epsilon = 0.1
     config.target_update = 10
     config.dqn_type = "double"
     config.lr = 2e-3
@@ -105,6 +105,10 @@ class DQN(object):
 
   def train(self, batch):
     self._total_steps += 1
+    if self.total_steps % self.config.target_update == 0:
+      self._target_qf_params["q_net"] = deepcopy(
+          self._train_states["q_net"].params)
+
     self._train_states, self._target_qf_params, metrics = self._train_step(
         self._train_states, self._target_qf_params, next_rng(), batch)
 
@@ -118,8 +122,8 @@ class DQN(object):
       b_s = batch["observations"]
       b_a = batch["actions"].astype(int)
       b_s_ = batch["next_observations"]
-      b_r = batch["rewards"]
-      b_d = batch["dones"]
+      b_r = batch["rewards"].reshape(-1, 1)
+      b_d = batch["dones"].reshape(-1, 1)
 
       @wrap_with_rng(rng_generator())
       def forward_qf(rng, *args, **kwargs):
@@ -160,8 +164,6 @@ class DQN(object):
         key: train_states[key].apply_gradients(grads=grads[i][key])
         for i, key in enumerate(self.model_keys)
     }
-    if self.total_steps % self.config.target_update == 0:
-      target_qf_params["q_net"] = deepcopy(new_train_states["q_net"])
 
     metrics = collect_jax_metrics(aux_vals,
                                   ["q_vals", "target_q_vals", "q_loss"])
