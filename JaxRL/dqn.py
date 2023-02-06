@@ -128,7 +128,9 @@ class DQN(object):
                                 rngs=JaxRNG(rng)(self.q_net.rng_keys()))
 
       if self.config.dqn_type == "double":
-        max_actions =jnp.expand_dims(forward_qf(params["q_net"], b_s).argmax(axis=1), axis=-1)
+        max_actions = jnp.expand_dims(forward_qf(params["q_net"],
+                                                 b_s_).argmax(axis=1),
+                                      axis=-1)
         target_q_vals = jnp.take_along_axis(forward_qf(
             target_qf_params["q_net"], b_s_),
                                             max_actions,
@@ -144,6 +146,8 @@ class DQN(object):
                                    axis=1)
 
       q_loss = mse_loss(q_vals, td_target)
+
+      del b_s, b_a, b_s_, b_r, b_d
 
       return (q_loss,), locals()
 
