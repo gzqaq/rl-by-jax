@@ -15,8 +15,6 @@ class StepSampler(object):
     next_observations = []
     dones = []
 
-    self._current_observation = self.env.reset()[0]
-
     for _ in range(n_steps):
       self._traj_steps += 1
       observation = self._current_observation
@@ -90,6 +88,7 @@ class TrajSampler(object):
         observation = next_observation
 
         if done:
+          self.env.reset()
           break
 
       trajs.append(
