@@ -2,11 +2,25 @@ import numpy as np
 
 
 class StepSampler(object):
-  def __init__(self, env, max_traj_length=1000):
+  def __init__(self, env, max_traj_length=1000, new_gym_api=False):
     self.max_traj_length = max_traj_length
+    self._new_api = new_gym_api
     self._env = env
     self._traj_steps = 0
-    self._current_observation = self.env.reset()[0]
+    self._current_observation = self._env_reset()
+
+  def _env_reset(self):
+    if self._new_api:
+      return self.env.reset()[0]
+    else:
+      return self.env.reset()
+
+  def _env_step(self, action):
+    if self._new_api:
+      n_s, r, t, t_, _ = self.env.step(action)
+      return n_s, r, t or t_
+    else:
+      return self.env.step(action)
 
   def sample(self, policy, n_steps, deterministic=False, replay_buffer=None):
     observations = []
@@ -20,24 +34,23 @@ class StepSampler(object):
       observation = self._current_observation
       action = policy(observation.reshape(1, -1),
                       deterministic=deterministic).squeeze()
-      next_observation, reward, terminated, truncated, _ = self.env.step(action)
-      done = terminated or truncated
+      next_observation, reward, done = self._env_step(action)
 
       observations.append(observation)
       actions.append(action)
       rewards.append(reward)
-      dones.append(terminated)
+      dones.append(done)
       next_observations.append(next_observation)
 
       if replay_buffer is not None:
         replay_buffer.add_sample(observation, action, reward, next_observation,
-                                 terminated)
+                                 done)
 
       self._current_observation = next_observation
 
       if done or self._traj_steps >= self.max_traj_length:
         self._traj_steps = 0
-        self._current_observation = self.env.reset()[0]
+        self._current_observation = self._env_reset()
 
     return dict(
         observations=np.array(observations, dtype=np.float32),
@@ -53,9 +66,23 @@ class StepSampler(object):
 
 
 class TrajSampler(object):
-  def __init__(self, env, max_traj_length=1000):
+  def __init__(self, env, max_traj_length=1000, new_gym_api=False):
     self.max_traj_length = max_traj_length
+    self._new_api = new_gym_api
     self._env = env
+
+  def _env_reset(self):
+    if self._new_api:
+      return self.env.reset()[0]
+    else:
+      return self.env.reset()
+
+  def _env_step(self, action):
+    if self._new_api:
+      n_s, r, t, t_, _ = self.env.step(action)
+      return n_s, r, t or t_
+    else:
+      return self.env.step(action)
 
   def sample(self, policy, n_trajs, deterministic=False, replay_buffer=None):
     trajs = []
@@ -66,29 +93,27 @@ class TrajSampler(object):
       next_observations = []
       dones = []
 
-      observation = self.env.reset()[0]
+      observation = self._env_reset()
 
       for _ in range(self.max_traj_length):
         action = policy(observation.reshape(1, -1),
                         deterministic=deterministic).squeeze()
-        next_observation, reward, terminated, truncated, _ = self.env.step(
-            action)
-        done = terminated or truncated
+        next_observation, reward, done = self._env_step(action)
 
         observations.append(observation)
         actions.append(action)
         rewards.append(reward)
-        dones.append(terminated)
+        dones.append(done)
         next_observations.append(next_observation)
 
         if replay_buffer is not None:
           replay_buffer.add_sample(observation, action, reward,
-                                   next_observation, terminated)
+                                   next_observation, done)
 
         observation = next_observation
 
         if done:
-          self.env.reset()
+          self._env_reset()
           break
 
       trajs.append(
