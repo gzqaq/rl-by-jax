@@ -68,13 +68,13 @@ class BC(object):
                                  rngs=JaxRNG(rng)(self.policy.rng_keys()))
 
       if self.config.loss == "MLE":
-        log_probs = forward_policy(train_params["policy"],
+        log_probs = forward_policy(params["policy"],
                                    b_s,
                                    b_a,
                                    method=self.policy.log_prob)
         loss = -log_probs.mean()
       else:
-        a_hat, _ = forward_policy(train_params["policy"], b_s)
+        a_hat, _ = forward_policy(params["policy"], b_s)
         loss = mse_loss(a_hat, b_a)
 
       return (loss,), {f"{self.config.loss}_loss": loss}
