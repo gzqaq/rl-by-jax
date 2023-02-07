@@ -31,6 +31,20 @@ def get_d4rl_dataset(env):
   )
 
 
+def select_from_batch(batch: dict, indices):
+  res = dict()
+
+  for key in batch.keys():
+    res[key] = batch[key][indices, ...]
+
+  return res
+
+
+def subsample_batch(batch: dict, size):
+  indices = np.random.randint(batch["observations"].shape[0], size=size)
+  return select_from_batch(batch, indices)
+
+
 def define_flags_with_default(**kwargs):
   for key, val in kwargs.items():
     if isinstance(val, ConfigDict):
@@ -114,8 +128,8 @@ class WandBLogger(object):
     config = ConfigDict()
     config.online = False
     config.prefix = "JaxRL"
-    config.project = "dqn"
-    config.output_dir = "/tmp/JaxCQL"
+    config.project = "BC"
+    config.output_dir = "/tmp/JaxRL"
     config.random_delay = 0.0
     config.experiment_id = config_dict.placeholder(str)
     config.anonymous = config_dict.placeholder(str)
