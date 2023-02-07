@@ -27,11 +27,12 @@ FLAGS_DEF = define_flags_with_default(
     orthogonal_init=False,
 
     n_epochs=200,
-    n_env_steps_per_epoch=500,
-    n_train_step_per_epoch=100,
+    n_env_steps_per_epoch=100,
+    n_train_step_per_epoch=1000,
+    minimal_size=1000,
     eval_period=1,
     eval_n_trajs=5,
-    batch_size=256,
+    batch_size=512,
 
     dqn=DQN.get_default_config(),
     logging=WandBLogger.get_default_config(),
@@ -70,7 +71,7 @@ def main(argv):
     with Timer() as rollout_timer:
       train_sampler.sample(
           policy.update_q_net(dqn.train_params["q_net"]),
-          FLAGS.n_env_steps_per_epoch,
+          FLAGS.minimal_size,
           deterministic=False,
           replay_buffer=rb,
       )
