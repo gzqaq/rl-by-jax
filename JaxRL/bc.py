@@ -50,7 +50,7 @@ class BC(object):
   def train(self, batch):
     self._total_steps += 1
     self._train_states, metrics = self._train_one_step(self._train_states,
-                                                      next_rng(), batch)
+                                                       next_rng(), batch)
     return metrics
 
   @partial(jax.jit, static_argnames=("self"))
@@ -99,10 +99,10 @@ class BC(object):
   @property
   def train_states(self):
     return self._train_states
-  
+
   @property
   def train_params(self):
-    return {key : self.train_states[key].params for key in self.model_keys}
+    return {key: self.train_states[key].params for key in self.model_keys}
 
   @property
   def total_steps(self):

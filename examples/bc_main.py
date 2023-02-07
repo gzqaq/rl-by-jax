@@ -61,19 +61,28 @@ def main(argv):
   eval_sampler = TrajSampler(env, FLAGS.max_traj_length)
 
   dataset = get_d4rl_dataset(env)
-  dataset['rewards']=dataset['rewards']*FLAGS.reward_scale + FLAGS.reward_bias
-  dataset['actions']=np.clip(dataset['actions'],-FLAGS.clip_action, FLAGS.clip_action)
+  dataset[
+      "rewards"] = dataset["rewards"] * FLAGS.reward_scale + FLAGS.reward_bias
+  dataset["actions"] = np.clip(dataset["actions"], -FLAGS.clip_action,
+                               FLAGS.clip_action)
 
   obs_dim = env.observation_space.shape[0]
   action_dim = env.action_space.shape[0]
 
-  policy=TanhGaussianPolicy(obs_dim,action_dim,FLAGS.policy_arch, FLAGS.orthogonal_init, FLAGS.policy_log_std_multiplier, FLAGS.policy_log_std_offset)
+  policy = TanhGaussianPolicy(
+      obs_dim,
+      action_dim,
+      FLAGS.policy_arch,
+      FLAGS.orthogonal_init,
+      FLAGS.policy_log_std_multiplier,
+      FLAGS.policy_log_std_offset,
+  )
   bc = BC(FLAGS.bc, policy)
-  sample_policy = SamplePolicy(policy, bc.train_params['policy'])
+  sample_policy = SamplePolicy(policy, bc.train_params["policy"])
 
   viskit_metrics = dict()
   for i_epoch in range(FLAGS.n_epochs):
-    metrics = {'epoch':i_epoch}
+    metrics = {"epoch": i_epoch}
 
     with Timer() as train_timer:
       for _ in range(FLAGS.n_train_step_per_epoch):
@@ -92,7 +101,10 @@ def main(argv):
             [np.sum(t["rewards"]) for t in trajs])
         metrics["average_traj_length"] = np.mean(
             [len(t["rewards"]) for t in trajs])
-        metrics['average_normalized_return']=np.mean([eval_sampler.env.get_normalized_score(np.sum(t['rewards'])) for t in trajs])
+        metrics["average_normalized_return"] = np.mean([
+            eval_sampler.env.get_normalized_score(np.sum(t["rewards"]))
+            for t in trajs
+        ])
 
         if FLAGS.save_model:
           save_data = {"BC": bc, "variant": variant, "epoch": i_epoch}
