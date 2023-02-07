@@ -197,7 +197,7 @@ class SamplePolicy(object):
         observations,
         deterministic,
         repeat=None,
-        rng=JaxRNG(rng)(self.policy.rng_keys()),
+        rngs=JaxRNG(rng)(self.policy.rng_keys()),
     )
 
   def __call__(self, observations, deterministic=False):

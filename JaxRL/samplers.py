@@ -82,7 +82,8 @@ class TrajSampler(object):
       n_s, r, t, t_, _ = self.env.step(action)
       return n_s, r, t or t_
     else:
-      return self.env.step(action)
+      n_s, r, d, _ = self.env.step(action)
+      return n_s, r, d
 
   def sample(self, policy, n_trajs, deterministic=False, replay_buffer=None):
     trajs = []
