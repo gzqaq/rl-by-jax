@@ -77,6 +77,7 @@ class DQN(object):
     config.target_update = 10
     config.dqn_type = "double"
     config.lr = 2e-3
+    config.optim_type = "adam"
 
     if updates:
       config.update(ConfigDict(updates).copy_and_resolve_references())
@@ -90,11 +91,12 @@ class DQN(object):
     self.action_dim = q_net.action_dim
 
     self._train_states = {}
+    optim_class = {"adam": optax.adam, "sgd": optax.sgd}[self.config.optim_type]
 
     q_params = self.q_net.init(next_rng(self.q_net.rng_keys()),
                                jnp.zeros((10, self.obs_dim)))
     self._train_states["q_net"] = TrainState.create(params=q_params,
-                                                    tx=optax.adam(
+                                                    tx=optim_class(
                                                         self.config.lr),
                                                     apply_fn=None)
     self._target_qf_params = deepcopy({"q_net": q_params})
