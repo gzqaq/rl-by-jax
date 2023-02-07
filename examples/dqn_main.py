@@ -53,8 +53,8 @@ def main(argv):
 
   env = gym.make(FLAGS.env).unwrapped
 
-  train_sampler = StepSampler(env, FLAGS.max_traj_length)
-  eval_sampler = TrajSampler(env, FLAGS.max_traj_length)
+  train_sampler = StepSampler(env, FLAGS.max_traj_length, True)
+  eval_sampler = TrajSampler(env, FLAGS.max_traj_length, True)
   rb = ReplayBuffer(FLAGS.replay_buffer_size)
 
   obs_dim = env.observation_space.shape[0]
