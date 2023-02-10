@@ -129,13 +129,13 @@ class ConservativeSAC(object):
 
       loss_collection = {}
 
-      @wrap_with_rng(rng_generator)
+      @wrap_with_rng(rng_generator())
       def forward_policy(rng, *args, **kwargs):
         return self.policy.apply(*args,
                                  **kwargs,
                                  rngs=JaxRNG(rng)(self.policy.rng_keys()))
 
-      @wrap_with_rng(rng_generator)
+      @wrap_with_rng(rng_generator())
       def forward_qf(rng, *args, **kwargs):
         return self.qf.apply(*args,
                              **kwargs,
