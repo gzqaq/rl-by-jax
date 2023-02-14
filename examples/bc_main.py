@@ -1,10 +1,10 @@
 from JaxRL.bc import BC
+from JaxRL.datasets.d4rl import get_d4rl_dataset
+from JaxRL.datasets.utils import subsample_batch
 from JaxRL.nn import TanhGaussianPolicy, SamplePolicy
 from JaxRL.samplers import TrajSampler
 from JaxRL.jax_utils import batch_to_jax
 from JaxRL.utils import (
-    get_d4rl_dataset,
-    subsample_batch,
     Timer,
     WandBLogger,
     define_flags_with_default,

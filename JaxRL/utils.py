@@ -2,7 +2,6 @@ from .jax_utils import init_rng
 
 import absl.flags
 import cloudpickle as pickle
-import d4rl
 import numpy as np
 import os
 import pprint
@@ -17,32 +16,6 @@ from ml_collections import ConfigDict
 from ml_collections.config_dict import config_dict
 from ml_collections.config_flags import config_flags
 from socket import gethostname
-
-
-def get_d4rl_dataset(env):
-  ds = d4rl.qlearning_dataset(env)
-
-  return dict(
-      observations=ds["observations"],
-      actions=ds["actions"],
-      next_observations=ds["next_observations"],
-      rewards=ds["rewards"],
-      dones=ds["terminals"].astype(np.float32),
-  )
-
-
-def select_from_batch(batch: dict, indices):
-  res = dict()
-
-  for key in batch.keys():
-    res[key] = batch[key][indices, ...]
-
-  return res
-
-
-def subsample_batch(batch: dict, size):
-  indices = np.random.randint(batch["observations"].shape[0], size=size)
-  return select_from_batch(batch, indices)
 
 
 def define_flags_with_default(**kwargs):
