@@ -1,4 +1,5 @@
-from .jax_utils import extend_and_repeat, next_rng, JaxRNG
+from .jax_utils import extend_and_repeat
+from .random import next_rng, JaxRNG
 
 import jax
 import jax.nn.initializers as initializers
@@ -18,7 +19,7 @@ def update_target_network(params, target_params, tau):
 
 
 def multi_action_q_func(q_func_forward):
-  """ Forward Q function with multiple actions on each state. Used as a decorator. """
+  """Forward Q function with multiple actions on each state. Used as a decorator."""
   def wrapped(self, observations, actions, **kwargs):
     multi_actions = False
     bs = observations.shape[0]

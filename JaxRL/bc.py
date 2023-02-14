@@ -1,11 +1,5 @@
-from .jax_utils import (
-    JaxRNG,
-    next_rng,
-    wrap_with_rng,
-    value_and_multi_grad,
-    mse_loss,
-    collect_jax_metrics,
-)
+from .jax_utils import value_and_multi_grad, mse_loss, collect_jax_metrics
+from .random import JaxRNG, next_rng, wrap_with_rng
 
 import jax
 import jax.numpy as jnp

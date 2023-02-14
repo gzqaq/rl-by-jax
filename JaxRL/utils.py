@@ -1,4 +1,4 @@
-from .jax_utils import init_rng
+from .random import init_rng
 
 import absl.flags
 import cloudpickle as pickle
