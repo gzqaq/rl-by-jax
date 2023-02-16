@@ -48,7 +48,7 @@ def get_d4rl_dataset(env):
 
 
 def get_sequence_dataset(env):
-  ds = get_d4rl_dataset(env)
+  ds = d4rl.qlearning_dataset(env)
 
   N = ds["observations"].shape[0]
   data = defaultdict(list)
@@ -61,7 +61,7 @@ def get_sequence_dataset(env):
     if use_timeout:
       final = ds["timeouts"][i]
     else:
-      final = episode_step == env._max_episode_steps - 1
+      final = episode_step == env.max_episode_steps - 1
 
     for key in ds:
       data[key].append(ds[key][i])
